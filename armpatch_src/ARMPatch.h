@@ -309,7 +309,10 @@ namespace ARMPatch
         If it`s a thumb code? A simple ass check
         addr - what to check?
     */
-    bool IsThumbAddr(uintptr_t addr);
+    inline bool IsThumbAddr(uintptr_t addr)
+    {
+        return THUMBMODE(addr);
+    }
     
     // xDL part
     uintptr_t GetLibXDL(void* handle);

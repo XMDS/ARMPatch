@@ -59,7 +59,7 @@ namespace ARMPatch
             if (!xdl_addr4(reinterpret_cast<void*>(libAddr), &info, &cache, XDL_NON_SYM)) return 0;
             void* handle = xdl_open(info.dli_fname, XDL_DEFAULT);
             xdl_addr_clean(&cache);
-            retuen handle;
+            return handle;
         #else
             Dl_info info;
             if (!dladdr(reinterpret_cast<void*>(libAddr), &info) return 0;
@@ -265,7 +265,7 @@ namespace ARMPatch
                 else
                 {
                     Gloss::Inst::MakeArmB(addr, dest);
-                    retuen 4;
+                    return 4;
                 }
             #elif defined __64BIT
                 Gloss::Inst::MakeArm64B(addr, dest);
@@ -383,7 +383,7 @@ namespace ARMPatch
             void* ret = GlossHookRedirect(reinterpret_cast<void*>(addr), reinterpret_cast<void*>(to), _4byte, mode);
             size_t len = 0;
             GlossHookGetBackupsBuffer(ret, &len);
-            retuen len;
+            return len;
         #else
             #ifdef __32BIT
                 uint32_t hook[2] = {0xE51FF004, to};
@@ -531,11 +531,6 @@ namespace ARMPatch
             if (CompareData((const uint8_t*)addr, patternstart, length)) return addr;
         }
         return (uintptr_t)0;
-    }
-
-    bool IsThumbAddr(uintptr_t addr)
-    {
-        return THUMBMODE(addr);
     }
 
     // xDL part
