@@ -127,6 +127,15 @@ namespace ARMPatch
             return reinterpret_cast<uintptr_t>(dlsym(handle, sym));
         #endif
     }
+    
+    size_t GetGot(void* handle, const char* sym, uintptr_t** addr_list)
+    {
+        #if defined(__USEGLOSS)
+            sizet_t list_size = 0;
+            if (GlossGot(handle, sym, addr_list, &list_size)) return list_size;
+        #endif
+        return 0;
+    }
 
     int Unprotect(uintptr_t addr, size_t len)
     {
@@ -443,7 +452,7 @@ namespace ARMPatch
         #endif
     }
 
-    bool hookGotInternal(void* addr, void* func, void** original)
+    bool hookPLTInternal(void* addr, void* func, void** original)
     {
         if (addr == nullptr || func == nullptr || addr == func || (original != nullptr && *original == func)) return false;
         #if defined(__USEGLOSS)

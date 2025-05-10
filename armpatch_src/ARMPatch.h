@@ -47,8 +47,8 @@
     #define HOOKSYM(_name, _libHndl, _fnSym)                        \
         ARMPatch::Hook((void*)(ARMPatch::GetSym(_libHndl, _fnSym)), (void*)(&HookOf_##_name), (void**)(&_name));
     /* Just a hook of a function located in PLT section (by address!) */
-    #define HOOKGOT(_name, _fnAddr)                                 \
-        ARMPatch::HookGot((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    #define HOOKPLT(_name, _fnAddr)                                 \
+        ARMPatch::HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
 #endif
 
 #define ARMPATCH_VER 3
@@ -135,7 +135,7 @@ namespace ARMPatch
     void* GetLibHandle(uintptr_t libAddr);
     /*
         Close library's handle
-        handle - dl or xdl handle
+        handle - HANDLE (NOTICE THIS!!!) of a library (u can obtain it using dlopen)
     */
     void CloseLibHandle(void* handle)
     /*
@@ -299,16 +299,16 @@ namespace ARMPatch
     bool Hook(A addr, B func, C original) { return hookInternal((void*)addr, (void*)func, (void**)original); }
     
     /*
-        A simple hook of a .got section functions (use HookGot instead of hookGotInternal, ofc reprotects it!)
+        A simple hook of a .got .plt section functions (use HookPLT instead of hookPLTInternal, ofc reprotects it!)
         addr - what to hook?
         func - Call that function instead of an original
         original - Original function!
     */
-    bool hookGotInternal(void* addr, void* func, void** original);
+    bool hookPLTInternal(void* addr, void* func, void** original);
     template<class A, class B>
-    bool HookGot(A addr, B func) { return hookGotInternal((void*)addr, (void*)func, (void**)NULL); }
+    bool HookPLT(A addr, B func) { return hookPLTInternal((void*)addr, (void*)func, (void**)NULL); }
     template<class A, class B, class C>
-    bool HookGot(A addr, B func, C original) { return hookGotInternal((void*)addr, (void*)func, (void**)original); }
+    bool HookPLT(A addr, B func, C original) { return hookPLTInternal((void*)addr, (void*)func, (void**)original); }
     
     /*
         If it`s a thumb code? A simple ass check
@@ -350,6 +350,15 @@ namespace ARMPatch
         addr - what to check?
     */
     uintptr_t GetBranchDest(uintptr_t addr);
+    
+    /*
+        Get library's .got address by symbol 
+        handle - HANDLE (NOTICE THIS!!!) of a library (only xdl)
+        sym - name of a function
+        addr_list - .got addr save
+        return - addr num
+    */
+    size_t GetGot(void* handle, const char* sym, uintptr_t** addr_list);
 
     // GlossHook part END
 }
