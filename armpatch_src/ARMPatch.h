@@ -18,7 +18,7 @@
     #define __32BIT
     #define DETHUMB(_a) (((uintptr_t)_a) & ~0x1)
     #define RETHUMB(_a) (((uintptr_t)_a) | 0x1)
-    #define THUMBMODE(_a) ((((uintptr_t)_a) & 0x1)||(((uintptr_t)_a) & 0x2)||ARMPatch::bThumbMode||(ARMPatch::GetAddrBaseXDL((uintptr_t)_a) & 0x1))
+    #define THUMBMODE(_a) ((((uintptr_t)_a) & 0x1)||ARMPatch::bThumbMode||(ARMPatch::GetSymAddrXDL((uintptr_t)_a) & 0x1))
     extern "C" bool MSHookFunction(void* symbol, void* replace, void** result);
 #elif defined __aarch64__
     #define __64BIT
@@ -47,11 +47,11 @@
     #define HOOKSYM(_name, _libHndl, _fnSym)                        \
         ARMPatch::Hook((void*)(ARMPatch::GetSym(_libHndl, _fnSym)), (void*)(&HookOf_##_name), (void**)(&_name));
     /* Just a hook of a function located in PLT section (by address!) */
-    #define HOOKPLT(_name, _fnAddr)                                 \
-        ARMPatch::HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    #define HOOKGOT(_name, _fnAddr)                                 \
+        ARMPatch::HookGot((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
 #endif
 
-#define ARMPATCH_VER 2
+#define ARMPATCH_VER 3
     
 #ifdef __32BIT
 enum ARMRegister : char
@@ -130,9 +130,9 @@ namespace ARMPatch
     void* GetLibHandle(const char* soLib);
     /*
         Get library's handle
-        addr - an address of anything inside a library
+        libAddr - an address of anything inside a library
     */
-    void* GetLibHandle(uintptr_t addr);
+    void* GetLibHandle(uintptr_t libAddr);
     /*
         Get library's end address
         soLib - name of a loaded library
@@ -146,7 +146,7 @@ namespace ARMPatch
     uintptr_t GetSym(void* handle, const char* sym);
     /*
         Get library's function address by symbol (__unwind???)
-        libAddr - ADDRESS (NOTICE THIS!!!) of a library (u can obtain it using getLib)
+        libAddr - an address of anything inside a library
         sym - name of a function
         @XMDS requested this
     */
@@ -155,6 +155,7 @@ namespace ARMPatch
     /*
         Reprotect memory to allow reading/writing/executing
         addr - address
+        len - range
     */
     int Unprotect(uintptr_t addr, size_t len = PAGE_SIZE);
     
@@ -172,6 +173,11 @@ namespace ARMPatch
     inline void Write(uintptr_t dest, const char* data, size_t size)
     {
         Write(dest, (uintptr_t)data, size);
+    }
+    inline void Write(uintptr_t dest, uint64_t data)
+    {
+        uint64_t dataPtr = data;
+        Write(dest, (uintptr_t)&dataPtr, 8);
     }
     inline void Write(uintptr_t dest, uint32_t data)
     {
@@ -213,25 +219,28 @@ namespace ARMPatch
     int WriteNOP4(uintptr_t addr, size_t count = 1);
     
     /*
-        Place JUMP instruction (reprotects it)
+        Place B instruction (reprotects it)
         addr - where to put
         dest - Jump to what?
+        is_b16 - Thumb16 B
     */
-    int WriteB(uintptr_t addr, uintptr_t dest);
+    int WriteB(uintptr_t addr, uintptr_t dest, bool is_b16 = false);
     
     /*
         Place BL instruction (reprotects it)
         addr - where to put
         dest - Jump to what?
+        is_width - Thumb BL.W
     */
-    void WriteBL(uintptr_t addr, uintptr_t dest);
+    void WriteBL(uintptr_t addr, uintptr_t dest, bool is_width = false);
     
     /*
         Place BLX instruction (reprotects it)
         addr - where to put
         dest - Jump to what?
+        is_width - Thumb BLX.W
     */
-    void WriteBLX(uintptr_t addr, uintptr_t dest);
+    void WriteBLX(uintptr_t addr, uintptr_t dest, bool is_width = false);
     
     /*
         Place RET instruction (RETURN, function end, reprotects it)
@@ -239,15 +248,22 @@ namespace ARMPatch
     */
     int WriteRET(uintptr_t addr);
     
-    void WriteMOV(uintptr_t addr, ARMRegister from, ARMRegister to);
+    /*
+        Place MOV instruction (register)
+        addr - where to put
+        from - src register
+        to - dest register
+    */
+    void WriteMOV(uintptr_t addr, register from, ARMRegister to);
     
     /*
-        Place LDR instruction (moves directly to the function with the same stack!)
+        Place absolute jump instruction (moves directly to the function with the same stack!)
         Very fast and very lightweight!
         addr - where to redirect
         to - redirect to what?
+        _4byte - use b instruction jump (GlossHook)
     */
-    int Redirect(uintptr_t addr, uintptr_t to);
+    int Redirect(uintptr_t addr, uintptr_t to, bool _4byte = false);
     
     /*
         ByteScanner
@@ -265,28 +281,29 @@ namespace ARMPatch
     uintptr_t GetAddressFromPattern(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
     
     /*
-        Cydia's Substrate / Rprop's Inline Hook (use hook instead of hookInternal, ofc reprotects it!)
+        Cydia's Substrate / Rprop's / dobby / Gloss Inline Hook (use hook instead of hookInternal, ofc reprotects it!)
         addr - what to hook?
         func - Call that function instead of an original
         original - Original function!
+        _4byte - use b instruction jump (GlossHook)
     */
-    bool hookInternal(void* addr, void* func, void** original);
+    bool hookInternal(void* addr, void* func, void** original, bool _4byte = false);
     template<class A, class B>
     bool Hook(A addr, B func) { return hookInternal((void*)addr, (void*)func, (void**)NULL); }
     template<class A, class B, class C>
     bool Hook(A addr, B func, C original) { return hookInternal((void*)addr, (void*)func, (void**)original); }
     
     /*
-        A simple hook of a PLT-section functions (use HookPLT instead of hookPLTInternal, ofc reprotects it!)
+        A simple hook of a .got section functions (use HookGot instead of hookGotInternal, ofc reprotects it!)
         addr - what to hook?
         func - Call that function instead of an original
         original - Original function!
     */
-    bool hookPLTInternal(void* addr, void* func, void** original);
+    bool hookGotInternal(void* addr, void* func, void** original);
     template<class A, class B>
-    bool HookPLT(A addr, B func) { return hookPLTInternal((void*)addr, (void*)func, (void**)NULL); }
+    bool HookGot(A addr, B func) { return hookGotInternal((void*)addr, (void*)func, (void**)NULL); }
     template<class A, class B, class C>
-    bool HookPLT(A addr, B func, C original) { return hookPLTInternal((void*)addr, (void*)func, (void**)original); }
+    bool HookGot(A addr, B func, C original) { return hookGotInternal((void*)addr, (void*)func, (void**)original); }
     
     /*
         If it`s a thumb code? A simple ass check
@@ -295,26 +312,19 @@ namespace ARMPatch
     bool IsThumbAddr(uintptr_t addr);
     
     // xDL part
-    bool IsCorrectXDLHandle(void* ptr);
-    uintptr_t GetLibXDL(void* ptr);
-    uintptr_t GetAddrBaseXDL(uintptr_t addr);
-    size_t GetSymSizeXDL(void* ptr);
-    const char* GetSymNameXDL(void* ptr);
+    uintptr_t GetLibXDL(void* handle);
+    uintptr_t GetSymAddrXDL(uintptr_t libaddr)
+    size_t GetSymSizeXDL(uintptr_t libaddr)
+    const char* GetSymNameXDL(uintptr_t libaddr);
     
     // GlossHook part START
 
     /*
-        A branch hook
+        A branch hook (BL BLX)
         addr - what to hook?
         func - Call that function instead of an original
         original - Original function!
     */
-    bool hookBranchInternal(void* addr, void* func, void** original);
-    template<class A, class B>
-    bool HookB(A addr, B func) { return hookBranchInternal((void*)addr, (void*)func, (void**)NULL); }
-    template<class A, class B, class C>
-    bool HookB(A addr, B func, C original) { return hookBranchInternal((void*)addr, (void*)func, (void**)original); }
-    
     bool hookBranchLinkInternal(void* addr, void* func, void** original);
     template<class A, class B>
     bool HookBL(A addr, B func) { return hookBranchLinkInternal((void*)addr, (void*)func, (void**)NULL); }
