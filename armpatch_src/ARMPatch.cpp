@@ -66,6 +66,14 @@ namespace ARMPatch
             return dlopen(info.dli_fname, RTLD_LAZY);
         #endif
     }
+    
+    void CloseLibHandle(void* handle)
+    {
+        #ifdef __XDL
+            xdl_close(handle);
+        #else
+            dlclose(handle);
+    }
 
     uintptr_t GetLibLength(const char* soLib)
     {

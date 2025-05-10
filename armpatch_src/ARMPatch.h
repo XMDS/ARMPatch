@@ -134,6 +134,11 @@ namespace ARMPatch
     */
     void* GetLibHandle(uintptr_t libAddr);
     /*
+        Close library's handle
+        handle - dl or xdl handle
+    */
+    void CloseLibHandle(void* handle)
+    /*
         Get library's end address
         soLib - name of a loaded library
     */
